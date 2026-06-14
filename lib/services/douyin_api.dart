@@ -168,7 +168,7 @@ class DouyinApiService {
   }) async {
     if (_webView.isReady) {
       try {
-        final result = await _fetchPostsViaWebView(secUid);
+        final result = await _fetchPostsViaWebView(secUid, count, minCursor);
         if (result != null && result.posts.isNotEmpty) return result;
       } catch (e) {
         debugPrint('WebView failed: $e');
