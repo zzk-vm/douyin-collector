@@ -22,3 +22,4 @@ ios/.symlinks/
 *.swo
 .DS_Store
 Thumbs.db
+.github/workflows/
