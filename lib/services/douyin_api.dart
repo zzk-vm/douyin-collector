@@ -78,10 +78,24 @@ class DouyinApiService {
         throw DouyinApiException('抖音返回了异常数据，可能被限制访问');
       }
 
-      final user = data['user_info'] as Map<String, dynamic>?;
+      // 尝试多种字段名解析用户数据
+      Map<String, dynamic>? user;
+      user = data['user_info'] as Map<String, dynamic>?;
       if (user == null) {
-        // 检查错误信息
-        final errMsg = data['status_msg'] as String? ?? '未知错误';
+        user = data['user'] as Map<String, dynamic>?;
+      }
+      if (user == null) {
+        // 嵌套在 data 字段里
+        final innerData = data['data'] as Map<String, dynamic>?;
+        if (innerData != null) {
+          user = innerData['user_info'] as Map<String, dynamic>? ??
+              innerData['user'] as Map<String, dynamic>?;
+        }
+      }
+      if (user == null) {
+        final errMsg = data['status_msg'] as String? ??
+            data['status_code']?.toString() ??
+            '未知错误';
         throw DouyinApiException('抖音API错误: $errMsg');
       }
 
