@@ -189,8 +189,8 @@ class DouyinApiService {
       for (final item in userList) {
         final userInfo = item['user_info'] as Map<String, dynamic>?;
         if (userInfo == null) continue;
-        final uid = userInfo['unique_id'] as String? ?? '';
-        final shortId = userInfo['short_id'] as String? ?? '';
+        final uid = userInfo['unique_id']?.toString() ?? '';
+        final shortId = userInfo['short_id']?.toString() ?? '';
         if (uid == keyword || shortId == keyword) {
           return _extractUserInfo(userInfo);
         }
@@ -263,18 +263,28 @@ class DouyinApiService {
   // ==================== 数据提取 ====================
 
   Map<String, dynamic> _extractUserInfo(Map<String, dynamic> user) {
+    // 安全转换：处理字段可能是 String/Int/null 的情况
+    String? _safeStr(dynamic v) => v?.toString();
+    int _safeInt(dynamic v, {int def = 0}) {
+      if (v is int) return v;
+      return int.tryParse(v?.toString() ?? '') ?? def;
+    }
+    String? _safeUrl(dynamic v) {
+      if (v is Map<String, dynamic>) return _extractUrl(v);
+      return null;
+    }
+
     return {
-      'secUid': user['sec_uid'] as String? ?? '',
-      'uniqueId': user['unique_id'] as String?,
-      'nickname': user['nickname'] as String? ?? '未知',
-      'avatarUrl': _extractUrl(user['avatar_larger'] as Map<String, dynamic>? ??
-          user['avatar_medium'] as Map<String, dynamic>?),
-      'signature': user['signature'] as String?,
-      'followerCount': user['follower_count'] as int? ?? 0,
-      'followingCount': user['following_count'] as int? ?? 0,
-      'totalFavorited': int.tryParse(
-              (user['total_favorited'] as String?) ?? '0') ??
-          0,
+      'secUid': _safeStr(user['sec_uid']) ?? '',
+      'uniqueId': _safeStr(user['unique_id']),
+      'nickname': _safeStr(user['nickname']) ?? '未知',
+      'avatarUrl': _safeUrl(user['avatar_larger']) ??
+          _safeUrl(user['avatar_medium']) ??
+          '',
+      'signature': _safeStr(user['signature']),
+      'followerCount': _safeInt(user['follower_count']),
+      'followingCount': _safeInt(user['following_count']),
+      'totalFavorited': _safeInt(user['total_favorited']),
     };
   }
 
@@ -283,15 +293,14 @@ class DouyinApiService {
       final awemeId = item['aweme_id'] as String?;
       if (awemeId == null) return null;
 
-      final desc = item['desc'] as String? ?? '';
-      final createTime = item['create_time'] as int? ?? 0;
+      final desc = (item['desc'] as String?) ?? '';
+      final createTime = (item['create_time'] as int?) ?? 0;
       final images = item['images'] as List<dynamic>?;
       final video = item['video'] as Map<String, dynamic>?;
       final statistics = item['statistics'] as Map<String, dynamic>?;
 
       final isImagePost = images != null && images.isNotEmpty;
 
-      // 提取图片URL
       List<String> imageUrls = [];
       if (isImagePost) {
         for (final img in images) {
@@ -300,7 +309,6 @@ class DouyinApiService {
         }
       }
 
-      // 提取视频信息
       String? videoCoverUrl;
       String? videoUrl;
       if (video != null) {
@@ -311,7 +319,6 @@ class DouyinApiService {
         videoUrl = _extractUrl(playAddr);
       }
 
-      // 如果图文没有单独封面，用第一张图代替
       if (isImagePost && videoCoverUrl == null && imageUrls.isNotEmpty) {
         videoCoverUrl = imageUrls.first;
       }
@@ -324,12 +331,11 @@ class DouyinApiService {
         'imageUrls': imageUrls,
         'videoCoverUrl': videoCoverUrl,
         'videoUrl': videoUrl,
-        'viewCount': statistics?['view_count'] as int? ?? 0,
-        'likeCount': statistics?['digg_count'] as int? ?? 0,
-        'commentCount': statistics?['comment_count'] as int? ?? 0,
-        'shareCount': statistics?['share_count'] as int? ?? 0,
-        'shareUrl':
-            'https://www.douyin.com/video/$awemeId',
+        'viewCount': (statistics?['view_count'] as int?) ?? 0,
+        'likeCount': (statistics?['digg_count'] as int?) ?? 0,
+        'commentCount': (statistics?['comment_count'] as int?) ?? 0,
+        'shareCount': (statistics?['share_count'] as int?) ?? 0,
+        'shareUrl': 'https://www.douyin.com/video/$awemeId',
       };
     } catch (e) {
       return null;
