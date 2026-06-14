@@ -170,6 +170,26 @@ class DouyinApiService {
 
   Future<DouyinPostListResult?> _fetchPostsViaWebView(
       String secUid, int count, int cursor) async {
+    // 方式1: 用 WebView JavaScript fetch（带真实浏览器 cookie）
+    final apiData = await _webView.fetchJson(
+        '/aweme/v1/web/aweme/post/', queryParams: {
+      'sec_user_id': secUid,
+      'count': count.toString(),
+      'max_cursor': cursor.toString(),
+      'min_cursor': '0',
+      'aid': _aid,
+      'device_platform': 'webapp',
+    });
+    if (apiData != null) {
+      final al = apiData['aweme_list'] as List<dynamic>?;
+      if (al != null && al.isNotEmpty) return _parsePostList(al, apiData);
+      final inner = apiData['data'] as Map<String, dynamic>?;
+      if (inner != null) {
+        final il = inner['aweme_list'] as List<dynamic>?;
+        if (il != null && il.isNotEmpty) return _parsePostList(il, apiData);
+      }
+    }
+    // 方式2: 页面 HTML 提取
     final pageData = await _webView.extractPageData(secUid);
     if (pageData == null) return null;
     final awemeList = _deepSearchList(pageData, 'aweme_list');
