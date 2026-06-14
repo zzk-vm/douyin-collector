@@ -45,11 +45,15 @@ class DouyinApiService {
   /// 初始化：获取匿名 session cookie
   Future<bool> initialize() async {
     try {
-      final response = await _dio.get('/');
-      if (response.statusCode == 200) {
-        return true;
-      }
-      return false;
+      // 访问首页获取基础 cookie
+      await _dio.get('/', options: Options(headers: {
+        'User-Agent':
+            'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
+            '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      }));
+      await _dio.get('/aweme/v1/web/homefeed/recommend/',
+          queryParameters: {'aid': _aid, 'device_platform': 'webapp'});
+      return true;
     } catch (e) {
       return false;
     }
@@ -60,6 +64,14 @@ class DouyinApiService {
   /// 通过 sec_uid 获取博主信息
   Future<Map<String, dynamic>?> getUserInfo(String secUid) async {
     try {
+      // 先访问用户主页获取 cookie
+      try {
+        await _dio.get('/user/$secUid',
+            options: Options(headers: {'Referer': '$_baseUrl/'}));
+      } catch (_) {
+        // 忽略页面加载错误，可能部分内容需要 JS
+      }
+
       final response = await _dio.get(
         '/aweme/v1/web/user/profile/other/',
         queryParameters: {
@@ -67,13 +79,22 @@ class DouyinApiService {
           'aid': _aid,
           'device_platform': 'webapp',
         },
+        options: Options(headers: {
+          'Referer': '$_baseUrl/user/$secUid',
+        }),
       );
 
       final data = _parseResponse(response);
-      if (data == null) return null;
+      if (data == null) {
+        throw DouyinApiException('抖音返回了异常数据，可能被限制访问');
+      }
 
       final user = data['user_info'] as Map<String, dynamic>?;
-      if (user == null) return null;
+      if (user == null) {
+        // 检查错误信息
+        final errMsg = data['status_msg'] as String? ?? '未知错误';
+        throw DouyinApiException('抖音API错误: $errMsg');
+      }
 
       return _extractUserInfo(user);
     } on DioException catch (e) {
@@ -154,7 +175,15 @@ class DouyinApiService {
       final data = _parseResponse(response);
       if (data == null) return null;
 
-      final userList = data['user_list'] as List<dynamic>?;
+      // 搜索API返回的字段名可能不同，尝试多种格式
+      var userList = data['user_list'] as List<dynamic>?;
+      // 有时搜索结果在 data 字段里
+      if (userList == null) {
+        final innerData = data['data'] as Map<String, dynamic>?;
+        if (innerData != null) {
+          userList = innerData['user_list'] as List<dynamic>?;
+        }
+      }
       if (userList == null || userList.isEmpty) return null;
 
       // 精确匹配 unique_id

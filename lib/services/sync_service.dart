@@ -172,7 +172,10 @@ class SyncService {
   /// 添加新博主
   Future<Creator> addCreator(String input) async {
     // 先初始化 session，否则抖音 API 会拒绝请求
-    await _api.initialize();
+    final initialized = await _api.initialize();
+    if (!initialized) {
+      throw DouyinApiException('无法连接到抖音，请检查网络后重试');
+    }
 
     Map<String, dynamic> userInfo;
 
@@ -180,12 +183,16 @@ class SyncService {
     final secUid = DouyinApiService.extractSecUidFromInput(input);
 
     if (secUid != null) {
-      userInfo = (await _api.getUserInfo(secUid))!;
+      final result = await _api.getUserInfo(secUid);
+      if (result == null) {
+        throw DouyinApiException('获取用户信息失败，该链接可能无效');
+      }
+      userInfo = result;
     } else {
       // 尝试通过抖音号查找
       final result = await _api.searchUserByUniqueId(input);
       if (result == null) {
-        throw DouyinApiException('找不到该用户，请检查输入是否正确');
+        throw DouyinApiException('找不到该用户，请检查抖音号是否正确');
       }
       userInfo = result;
     }
