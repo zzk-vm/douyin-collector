@@ -1,0 +1,37 @@
+name: douyin_collector
+description: 抖音博主内容自动收集器 - 存档库 & 信息流
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  # 数据库
+  sqflite: ^2.3.2
+  path: ^1.9.0
+  # 网络请求
+  dio: ^5.4.1
+  dio_cookie_manager: ^3.1.1
+  cookie_jar: ^4.0.8
+  # 图片缓存
+  cached_network_image: ^3.3.1
+  # 本地文件路径
+  path_provider: ^2.1.2
+  # 日期格式化
+  intl: ^0.19.0
+  # 状态管理
+  provider: ^6.1.1
+  # 通知
+  flutter_local_notifications: ^17.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
