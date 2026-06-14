@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/creator.dart';
 import '../models/post.dart';
+import '../models/view_style.dart';
 import 'database.dart';
 import 'sync_service.dart';
 
@@ -18,6 +19,9 @@ class AppState extends ChangeNotifier {
   List<Post> _creatorPosts = [];
   Creator? _currentCreator;
 
+  // 视图风格
+  ViewStyle _viewStyle = ViewStyle.news;
+
   List<Creator> get creators => _creators;
   List<Post> get feedPosts => _feedPosts;
   bool get isLoading => _isLoading;
@@ -25,6 +29,12 @@ class AppState extends ChangeNotifier {
   List<Post> get creatorPosts => _creatorPosts;
   Creator? get currentCreator => _currentCreator;
   bool get isSyncing => _sync.isSyncing;
+  ViewStyle get viewStyle => _viewStyle;
+
+  void setViewStyle(ViewStyle style) {
+    _viewStyle = style;
+    notifyListeners();
+  }
 
   // ==================== 初始化 ====================
 
@@ -52,7 +62,6 @@ class AppState extends ChangeNotifier {
 
     final result = await _sync.syncAll();
 
-    // 重新加载数据
     _creators = await _db.getAllCreators();
     _feedPosts = await _db.getAllPosts();
 
@@ -100,12 +109,10 @@ class AppState extends ChangeNotifier {
     if (_currentCreator == null) return;
     final creator = _currentCreator!;
 
-    // 先同步该博主的最新内容
     try {
       await syncAll();
     } catch (_) {}
 
-    // 重新加载
     _creatorPosts = await _db.getPostsByCreator(creator.id!);
     notifyListeners();
   }

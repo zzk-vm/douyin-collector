@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../services/app_state.dart';
 import '../models/post.dart';
+import '../models/view_style.dart';
+import 'post_card.dart';
 import 'post_detail_page.dart';
 
 /// 信息流首页
@@ -29,25 +30,41 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Consumer<AppState>(
       builder: (context, state, _) {
-        return RefreshIndicator(
-          onRefresh: () async {
-            final result = await state.syncAll();
-            if (context.mounted) {
-              final msg = result.hasError
-                  ? result.errorDetail
-                  : result.summary;
-              ScaffoldMessenger.of(context)
-                ..clearSnackBars()
-                ..showSnackBar(
-                  SnackBar(
-                    content: Text(msg),
+        final style = state.viewStyle;
+        return Scaffold(
+          // 极简模式用纯黑背景
+          backgroundColor:
+              style == ViewStyle.minimal ? Colors.black : null,
+
+          // 顶部栏 + 视图切换
+          appBar: AppBar(
+            title: const Text('信息流'),
+            actions: [
+              _ViewToggle(
+                current: style,
+                onChanged: (s) => state.setViewStyle(s),
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
+
+          body: RefreshIndicator(
+            color: style == ViewStyle.minimal ? Colors.white : null,
+            onRefresh: () async {
+              final result = await state.syncAll();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context)
+                  ..clearSnackBars()
+                  ..showSnackBar(SnackBar(
+                    content: Text(
+                        result.hasError ? result.errorDetail : result.summary),
                     behavior: SnackBarBehavior.floating,
                     duration: const Duration(seconds: 5),
-                  ),
-                );
-            }
-          },
-          child: _buildBody(state),
+                  ));
+              }
+            },
+            child: _buildBody(state),
+          ),
         );
       },
     );
@@ -62,43 +79,55 @@ class _HomePageState extends State<HomePage> {
       return _buildEmptyState(state);
     }
 
+    // 三种风格都使用 ListView，但卡片不同
+    final edgeInsets = state.viewStyle == ViewStyle.news
+        ? const EdgeInsets.symmetric(horizontal: 16, vertical: 0)
+        : EdgeInsets.zero;
+
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 80),
       itemCount: state.feedPosts.length,
       itemBuilder: (context, index) {
         final post = state.feedPosts[index];
-        return _PostCard(post: post);
+        return Padding(
+          padding: edgeInsets,
+          child: PostCard(
+            post: post,
+            style: state.viewStyle,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => PostDetailPage(post: post)),
+            ),
+          ),
+        );
       },
     );
   }
 
   Widget _buildEmptyState(AppState state) {
+    final isDark = state.viewStyle == ViewStyle.minimal ||
+        state.viewStyle == ViewStyle.glass;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.rss_feed_outlined,
-              size: 80,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.rss_feed_outlined,
+                size: 80, color: isDark ? Colors.white24 : Colors.grey[400]),
             const SizedBox(height: 16),
-            Text(
-              '还没有内容',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            Text('还没有内容',
+                style: TextStyle(
+                    fontSize: 18,
+                    color: isDark ? Colors.white54 : Colors.grey[600],
+                    fontWeight: FontWeight.w500)),
             const SizedBox(height: 8),
-            Text(
-              '去"博主"页面添加你关注的抖音博主吧\n然后下拉刷新获取最新内容',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[500]),
-            ),
+            Text('去"博主"页面添加你关注的抖音博主吧\n然后下拉刷新获取最新内容',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: isDark ? Colors.white38 : Colors.grey[500])),
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: state.isSyncing ? null : () async {
@@ -106,12 +135,12 @@ class _HomePageState extends State<HomePage> {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context)
                     ..clearSnackBars()
-                    ..showSnackBar(
-                      SnackBar(
-                        content: Text(result.summary),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                    ..showSnackBar(SnackBar(
+                      content: Text(result.hasError
+                          ? result.errorDetail
+                          : result.summary),
+                      behavior: SnackBarBehavior.floating,
+                    ));
                 }
               },
               icon: state.isSyncing
@@ -130,135 +159,52 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class _PostCard extends StatelessWidget {
-  final Post post;
+/// 视图风格切换按钮（三档循环切换）
+class _ViewToggle extends StatelessWidget {
+  final ViewStyle current;
+  final ValueChanged<ViewStyle> onChanged;
 
-  const _PostCard({required this.post});
+  const _ViewToggle({required this.current, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => PostDetailPage(post: post),
-            ),
-          );
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 封面图
-            if (post.coverUrl != null)
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: _buildCoverImage(),
-              ),
-
-            // 文案
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-              child: Text(
-                post.description,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  height: 1.4,
-                ),
-              ),
-            ),
-
-            // 底部信息
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-              child: Row(
-                children: [
-                  // 作品类型标记
-                  if (post.isImagePost)
-                    _buildTag(Icons.photo_library_outlined, '图文'),
-                  if (post.hasVideo)
-                    _buildTag(Icons.play_circle_outline, '视频'),
-                  const SizedBox(width: 8),
-
-                  // 互动数据
-                  if (post.likeCount > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.favorite_border,
-                              size: 14, color: Colors.grey[500]),
-                          const SizedBox(width: 2),
-                          Text(_formatCount(post.likeCount),
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey[500])),
-                        ],
-                      ),
-                    ),
-
-                  const Spacer(),
-
-                  // 发布时间
-                  Text(
-                    post.publishTimeFormatted,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+    return PopupMenuButton<ViewStyle>(
+      tooltip: '切换视图',
+      icon: Icon(_iconForStyle(current)),
+      onSelected: onChanged,
+      itemBuilder: (_) => ViewStyle.values.map((style) {
+        return PopupMenuItem(
+          value: style,
+          child: Row(
+            children: [
+              Icon(_iconForStyle(style),
+                  size: 20,
+                  color: style == current ? null : Colors.grey),
+              const SizedBox(width: 12),
+              Text(style.label,
+                  style: TextStyle(
+                      fontWeight:
+                          style == current ? FontWeight.w600 : FontWeight.normal,
+                      color: style == current ? null : null)),
+              if (style == current) ...[
+                const Spacer(),
+                const Icon(Icons.check, size: 16),
+              ],
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
-  Widget _buildCoverImage() {
-    return CachedNetworkImage(
-      imageUrl: post.coverUrl!,
-      fit: BoxFit.cover,
-      placeholder: (_, __) => Container(
-        color: Colors.grey[200],
-        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      ),
-      errorWidget: (_, __, ___) => Container(
-        color: Colors.grey[200],
-        child: const Icon(Icons.broken_image, color: Colors.grey),
-      ),
-    );
-  }
-
-  Widget _buildTag(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: Colors.grey[600]),
-          const SizedBox(width: 2),
-          Text(label,
-              style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-        ],
-      ),
-    );
-  }
-
-  String _formatCount(int count) {
-    if (count >= 10000) {
-      return '${(count / 10000).toStringAsFixed(1)}w';
+  IconData _iconForStyle(ViewStyle style) {
+    switch (style) {
+      case ViewStyle.news:
+        return Icons.article_outlined;
+      case ViewStyle.minimal:
+        return Icons.dark_mode_outlined;
+      case ViewStyle.glass:
+        return Icons.blur_on_outlined;
     }
-    if (count >= 1000) {
-      return '${(count / 1000).toStringAsFixed(1)}k';
-    }
-    return count.toString();
   }
 }
