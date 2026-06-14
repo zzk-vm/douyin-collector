@@ -19,7 +19,7 @@ jobs:
           channel: 'stable'
 
       - name: Generate Android platform files
-        run: flutter create --platforms=android .
+        run: flutter create --project-name douyin_collector --platforms=android .
 
       - name: Install dependencies
         run: flutter pub get
