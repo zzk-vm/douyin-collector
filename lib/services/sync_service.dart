@@ -171,6 +171,9 @@ class SyncService {
 
   /// 添加新博主
   Future<Creator> addCreator(String input) async {
+    // 先初始化 session，否则抖音 API 会拒绝请求
+    await _api.initialize();
+
     Map<String, dynamic> userInfo;
 
     // 尝试从输入中提取 sec_uid
