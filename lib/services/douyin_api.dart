@@ -45,15 +45,12 @@ class DouyinApiService {
   /// 初始化：获取匿名 session cookie
   Future<bool> initialize() async {
     try {
-      // 访问首页获取基础 cookie
-      await _dio.get('/', options: Options(headers: {
+      final response = await _dio.get('/', options: Options(headers: {
         'User-Agent':
             'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
             '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
       }));
-      await _dio.get('/aweme/v1/web/homefeed/recommend/',
-          queryParameters: {'aid': _aid, 'device_platform': 'webapp'});
-      return true;
+      return response.statusCode == 200;
     } catch (e) {
       return false;
     }
