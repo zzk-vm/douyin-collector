@@ -6,7 +6,6 @@ import 'models/view_style.dart';
 import 'screens/home_page.dart';
 import 'screens/creators_page.dart';
 
-/// 抖音内容收集器 - Material App
 class DouyinCollectorApp extends StatelessWidget {
   const DouyinCollectorApp({super.key});
 
@@ -25,67 +24,48 @@ class DouyinCollectorApp extends StatelessWidget {
   }
 
   ThemeData _buildTheme(ViewStyle style) {
-    // 柔和粉色系主色
-    const seedColor = Color(0xFFE8838A); // 玫瑰粉
+    const seedColor = Color(0xFFE8838A);
 
     switch (style) {
       case ViewStyle.minimal:
-        // 纯黑极简模式：深色主题
-        final colorScheme = ColorScheme.fromSeed(
-          seedColor: seedColor,
-          brightness: Brightness.dark,
-        );
+        final cs = ColorScheme.fromSeed(
+            seedColor: seedColor, brightness: Brightness.dark);
         return ThemeData(
           useMaterial3: true,
-          colorScheme: colorScheme,
+          colorScheme: cs,
           scaffoldBackgroundColor: Colors.black,
           navigationBarTheme: NavigationBarThemeData(
             backgroundColor: Colors.black,
-            indicatorColor: colorScheme.primary.withOpacity(0.2),
+            indicatorColor: cs.primary.withOpacity(0.2),
           ),
-          appBarTheme: AppBarTheme(
+          appBarTheme: const AppBarTheme(
             centerTitle: true,
             elevation: 0,
             backgroundColor: Colors.black,
             foregroundColor: Colors.white,
           ),
-          cardTheme: const CardThemeData(
-            color: Color(0xFF1A1A1A),
-            elevation: 0,
-          ),
         );
-
       default:
-        // 杂志 / 玻璃模式：浅色主题
-        final colorScheme = ColorScheme.fromSeed(
-          seedColor: seedColor,
-          brightness: Brightness.light,
-        );
+        final cs = ColorScheme.fromSeed(
+            seedColor: seedColor, brightness: Brightness.light);
         return ThemeData(
           useMaterial3: true,
-          colorScheme: colorScheme,
+          colorScheme: cs,
           appBarTheme: AppBarTheme(
             centerTitle: true,
             elevation: 0,
-            backgroundColor: colorScheme.surface,
-            foregroundColor: colorScheme.onSurface,
+            backgroundColor: cs.surface,
+            foregroundColor: cs.onSurface,
           ),
           navigationBarTheme: NavigationBarThemeData(
-            backgroundColor: colorScheme.surface,
-            indicatorColor: colorScheme.primaryContainer,
-          ),
-          cardTheme: CardThemeData(
-            elevation: 1,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
+            backgroundColor: cs.surface,
+            indicatorColor: cs.primaryContainer,
           ),
         );
     }
   }
 }
 
-/// 主框架：底部导航 + 页面切换
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
 
@@ -95,11 +75,7 @@ class MainScaffold extends StatefulWidget {
 
 class _MainScaffoldState extends State<MainScaffold> {
   int _currentIndex = 0;
-
-  final _pages = const [
-    HomePage(),
-    CreatorsPage(),
-  ];
+  final _pages = const [HomePage(), CreatorsPage()];
 
   @override
   Widget build(BuildContext context) {
@@ -110,16 +86,11 @@ class _MainScaffoldState extends State<MainScaffold> {
       children: [
         const Positioned.fill(child: HiddenWebView()),
         Scaffold(
-          body: IndexedStack(
-            index: _currentIndex,
-            children: _pages,
-          ),
+          body: IndexedStack(index: _currentIndex, children: _pages),
           bottomNavigationBar: NavigationBar(
             backgroundColor: isDark ? Colors.black : null,
             selectedIndex: _currentIndex,
-            onDestinationSelected: (index) {
-              setState(() => _currentIndex = index);
-            },
+            onDestinationSelected: (i) => setState(() => _currentIndex = i),
             destinations: [
               NavigationDestination(
                 icon: Badge(

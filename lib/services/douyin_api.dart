@@ -54,12 +54,10 @@ class DouyinApiService {
           if (user != null) return user;
         }
       }
-
       try {
         await _dio.get('/user/$secUid',
             options: Options(headers: {'Referer': '$_baseUrl/'}));
       } catch (_) {}
-
       final response = await _dio.get(
         '/aweme/v1/web/user/profile/other/',
         queryParameters: {
@@ -70,18 +68,14 @@ class DouyinApiService {
         options: Options(
             headers: _buildHeaders(referer: '$_baseUrl/user/$secUid')),
       );
-
       final data = _parseResponse(response);
       if (data == null) {
         throw DouyinApiException('抖音返回了异常数据，可能被限制访问');
       }
-
       final user = _extractUserFromData(data);
       if (user == null) {
-        final errMsg = data['status_msg'] as String? ??
-            data['status_code']?.toString() ??
-            '未知错误';
-        throw DouyinApiException('抖音API错误: $errMsg');
+        throw DouyinApiException(
+            'API错误: ${data['status_msg'] ?? data['status_code'] ?? '未知'}');
       }
       return user;
     } on DioException catch (e) {
@@ -100,10 +94,7 @@ class DouyinApiService {
             inner['user'] as Map<String, dynamic>?;
       }
     }
-    // 在深层嵌套中搜索
-    if (user == null) {
-      user = _deepSearchMap(data, 'user_info');
-    }
+    if (user == null) user = _deepSearchMap(data, 'user_info');
     if (user != null) return _extractUserInfo(user);
     return null;
   }
@@ -181,8 +172,6 @@ class DouyinApiService {
       String secUid, int count, int cursor) async {
     final pageData = await _webView.extractPageData(secUid);
     if (pageData == null) return null;
-
-    // 递归搜索 aweme_list
     final awemeList = _deepSearchList(pageData, 'aweme_list');
     if (awemeList != null && awemeList.isNotEmpty) {
       return _parsePostList(awemeList, {});
@@ -208,7 +197,10 @@ class DouyinApiService {
       );
       final data = _parseResponse(response);
       if (data == null) {
-        throw DouyinApiException('获取作品列表失败：API返回异常数据');
+        final raw = (response.data is String)
+            ? (response.data as String).substring(0, 300)
+            : 'status=${response.statusCode}';
+        throw DouyinApiException('API异常 [${response.statusCode}]: $raw');
       }
       final awemeList = data['aweme_list'] as List<dynamic>?;
       if (awemeList == null) {
@@ -241,26 +233,21 @@ class DouyinApiService {
   // ==================== 数据提取 ====================
 
   Map<String, dynamic> _extractUserInfo(Map<String, dynamic> user) {
-    String? _safeStr(dynamic v) => v?.toString();
-    int _safeInt(dynamic v, {int def = 0}) {
-      if (v is int) return v;
-      return int.tryParse(v?.toString() ?? '') ?? def;
-    }
-    String? _safeUrl(dynamic v) {
-      if (v is Map<String, dynamic>) return _extractUrl(v);
-      return null;
-    }
+    String? _s(dynamic v) => v?.toString();
+    int _i(dynamic v, {int d = 0}) =>
+        v is int ? v : int.tryParse(v?.toString() ?? '') ?? d;
+    String? _u(dynamic v) =>
+        v is Map<String, dynamic> ? _extractUrl(v) : null;
     return {
-      'secUid': _safeStr(user['sec_uid']) ?? '',
-      'uniqueId': _safeStr(user['unique_id']),
-      'nickname': _safeStr(user['nickname']) ?? '未知',
-      'avatarUrl': _safeUrl(user['avatar_larger']) ??
-          _safeUrl(user['avatar_medium']) ??
-          '',
-      'signature': _safeStr(user['signature']),
-      'followerCount': _safeInt(user['follower_count']),
-      'followingCount': _safeInt(user['following_count']),
-      'totalFavorited': _safeInt(user['total_favorited']),
+      'secUid': _s(user['sec_uid']) ?? '',
+      'uniqueId': _s(user['unique_id']),
+      'nickname': _s(user['nickname']) ?? '未知',
+      'avatarUrl':
+          _u(user['avatar_larger']) ?? _u(user['avatar_medium']) ?? '',
+      'signature': _s(user['signature']),
+      'followerCount': _i(user['follower_count']),
+      'followingCount': _i(user['following_count']),
+      'totalFavorited': _i(user['total_favorited']),
     };
   }
 
@@ -268,47 +255,43 @@ class DouyinApiService {
     try {
       final awemeId = item['aweme_id'] as String?;
       if (awemeId == null) return null;
-      final desc = (item['desc'] as String?) ?? '';
-      final createTime = (item['create_time'] as int?) ?? 0;
-      final images = item['images'] as List<dynamic>?;
-      final video = item['video'] as Map<String, dynamic>?;
-      final statistics = item['statistics'] as Map<String, dynamic>?;
-      final isImagePost = images != null && images.isNotEmpty;
-      List<String> imageUrls = [];
-      if (isImagePost) {
-        for (final img in images) {
-          final url = _extractUrl(img as Map<String, dynamic>?);
-          if (url != null) imageUrls.add(url);
-        }
-      }
-      String? videoCoverUrl;
-      String? videoUrl;
-      if (video != null) {
-        final cover = video['cover'] as Map<String, dynamic>?;
-        videoCoverUrl = _extractUrl(cover);
-        final playAddr = video['play_addr'] as Map<String, dynamic>?;
-        videoUrl = _extractUrl(playAddr);
-      }
-      if (isImagePost && videoCoverUrl == null && imageUrls.isNotEmpty) {
-        videoCoverUrl = imageUrls.first;
-      }
       return {
         'awemeId': awemeId,
-        'description': desc,
-        'publishTime': createTime,
-        'isImagePost': isImagePost,
-        'imageUrls': imageUrls,
-        'videoCoverUrl': videoCoverUrl,
-        'videoUrl': videoUrl,
-        'viewCount': (statistics?['view_count'] as int?) ?? 0,
-        'likeCount': (statistics?['digg_count'] as int?) ?? 0,
-        'commentCount': (statistics?['comment_count'] as int?) ?? 0,
-        'shareCount': (statistics?['share_count'] as int?) ?? 0,
+        'description': (item['desc'] as String?) ?? '',
+        'publishTime': (item['create_time'] as int?) ?? 0,
+        'isImagePost': (item['images'] as List?)?.isNotEmpty ?? false,
+        'imageUrls': _extractImageUrls(item['images'] as List?),
+        'videoCoverUrl': _extractCoverUrl(item['video'] as Map?),
+        'videoUrl': _extractPlayUrl(item['video'] as Map?),
+        'viewCount': (item['statistics']?['view_count'] as int?) ?? 0,
+        'likeCount': (item['statistics']?['digg_count'] as int?) ?? 0,
+        'commentCount': (item['statistics']?['comment_count'] as int?) ?? 0,
+        'shareCount': (item['statistics']?['share_count'] as int?) ?? 0,
         'shareUrl': 'https://www.douyin.com/video/$awemeId',
       };
     } catch (e) {
       return null;
     }
+  }
+
+  List<String> _extractImageUrls(List? images) {
+    if (images == null || images.isEmpty) return [];
+    final urls = <String>[];
+    for (final img in images) {
+      final url = _extractUrl(img as Map<String, dynamic>?);
+      if (url != null) urls.add(url);
+    }
+    return urls;
+  }
+
+  String? _extractCoverUrl(Map? video) {
+    if (video == null) return null;
+    return _extractUrl(video['cover'] as Map<String, dynamic>?);
+  }
+
+  String? _extractPlayUrl(Map? video) {
+    if (video == null) return null;
+    return _extractUrl(video['play_addr'] as Map<String, dynamic>?);
   }
 
   String? _extractUrl(Map<String, dynamic>? mediaItem) {
@@ -320,7 +303,6 @@ class DouyinApiService {
     return url.replaceAll(RegExp(r'~tplv.*'), '');
   }
 
-  /// 在嵌套 Map 中递归搜索指定 key 的 Map 值
   Map<String, dynamic>? _deepSearchMap(Map<String, dynamic> map, String key) {
     if (map.containsKey(key)) {
       final v = map[key];
@@ -342,7 +324,6 @@ class DouyinApiService {
     return null;
   }
 
-  /// 在嵌套 Map 中递归搜索指定 key 的 List 值
   List<dynamic>? _deepSearchList(Map<String, dynamic> map, String key) {
     if (map.containsKey(key)) {
       final v = map[key];
@@ -364,14 +345,6 @@ class DouyinApiService {
     return null;
   }
 
-  String? _extractSecUidFromRenderData(Map<String, dynamic> data) {
-    try {
-      return _deepSearchMap(data, 'sec_uid')?['sec_uid'] as String?;
-    } catch (_) {
-      return null;
-    }
-  }
-
   Map<String, dynamic>? _parseResponse(Response response) {
     if (response.statusCode != 200) return null;
     final data = response.data;
@@ -383,10 +356,10 @@ class DouyinApiService {
       }
     }
     if (data is Map<String, dynamic>) {
-      final statusCode = data['status_code'] as int?;
-      if (statusCode != null && statusCode != 0) {
+      final sc = data['status_code'] as int?;
+      if (sc != null && sc != 0) {
         throw DouyinApiException(
-            'API返回错误: status_code=$statusCode, msg=${data['status_msg']}');
+            'API返回错误: status_code=$sc, msg=${data['status_msg']}');
       }
       return data;
     }
@@ -397,24 +370,18 @@ class DouyinApiService {
     if (input.length > 20 && !input.contains('/') && !input.contains('.')) {
       return input;
     }
-    final urlMatch =
-        RegExp(r'douyin\.com/(?:user|share/user)/([^/?&#]+)').firstMatch(input);
-    if (urlMatch != null) return urlMatch.group(1)!;
-    final shortMatch =
-        RegExp(r'douyin\.com/(?:video|note)/(\d+)').firstMatch(input);
-    if (shortMatch != null) return shortMatch.group(1);
+    final m = RegExp(r'douyin\.com/(?:user|share/user)/([^/?&#]+)')
+        .firstMatch(input);
+    if (m != null) return m.group(1)!;
     return null;
   }
-
-  static bool isUniqueId(String input) =>
-      extractSecUidFromInput(input) == null;
 }
 
 class DouyinApiException implements Exception {
   final String message;
   DouyinApiException(this.message);
   @override
-  String toString() => 'DouyinApiException: $message';
+  String toString() => message;
 }
 
 class DouyinPostListResult {
