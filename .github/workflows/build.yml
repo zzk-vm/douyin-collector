@@ -17,6 +17,7 @@ jobs:
         with:
           flutter-version: '3.22.x'
           channel: 'stable'
+          cache: true
 
       - name: Generate Android platform files
         run: flutter create --project-name douyin_collector --platforms=android .
@@ -27,9 +28,20 @@ jobs:
       - name: Build APK
         run: flutter build apk --release
 
-      - name: Upload APK
+      - name: Upload APK as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: douyin-collector-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: build-${{ github.run_number }}
+          body: |
+            自动编译 APK #${{ github.run_number }}
+            提交: ${{ github.event.head_commit.message || '手动触发' }}
+          files: build/app/outputs/flutter-apk/app-release.apk
+          make_latest: true
