@@ -82,55 +82,101 @@ class DouyinApiService {
   }
 
   /// 通过 unique_id（抖音号）查找用户
-  /// 注：此方法通过访问用户主页来获取 sec_uid
   Future<Map<String, dynamic>?> searchUserByUniqueId(String uniqueId) async {
     try {
-      // 尝试直接访问用户主页
       final cleanId = uniqueId.replaceFirst('@', '');
-      final response = await _dio.get(
-        '/user/$cleanId',
-        options: Options(
-          followRedirects: false,
-          headers: {
-            'User-Agent':
-                'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36',
-            'Accept':
-                'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.9',
-          },
-        ),
-      );
 
-      // 从 HTML 中提取 sec_uid
-      final html = response.data as String?;
-      if (html == null) return null;
-
-      // 尝试从 HTML 中提取 sec_uid
-      final secUidMatch =
-          RegExp(r'''sec_uid["']?\s*[:=]\s*["']([^"']+)''')
-              .firstMatch(html);
-      if (secUidMatch != null) {
-        final secUid = secUidMatch.group(1)!;
-        return getUserInfo(secUid);
+      // 先用搜索 API 查找
+      try {
+        final result = await searchUser(cleanId);
+        if (result != null) return result;
+      } catch (_) {
+        // 搜索失败，走 fallback
       }
 
-      // 尝试从页面 JSON 数据中提取
-      final jsonMatch =
-          RegExp(r'''<script[^>]*id=["']RENDER_DATA["'][^>]*>([^<]+)''')
-              .firstMatch(html);
-      if (jsonMatch != null) {
-        final decoded = utf8.decode(base64Decode(jsonMatch.group(1)!));
-        final data = json.decode(decoded) as Map<String, dynamic>;
-        // 复杂的嵌套提取逻辑
-        final secUid = _extractSecUidFromRenderData(data);
-        if (secUid != null) {
-          return getUserInfo(secUid);
+      // 备用：直接访问用户主页
+      try {
+        final response = await _dio.get(
+          '/user/$cleanId',
+          options: Options(
+            followRedirects: false,
+            headers: {
+              'User-Agent':
+                  'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36',
+              'Accept':
+                  'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
+          ),
+        );
+
+        final html = response.data as String?;
+        if (html != null) {
+          final secUidMatch =
+              RegExp(r'''sec_uid["']?\s*[:=]\s*["']([^"']+)''')
+                  .firstMatch(html);
+          if (secUidMatch != null) {
+            return getUserInfo(secUidMatch.group(1)!);
+          }
+
+          // 尝试从 RENDER_DATA 中提取
+          final jsonMatch =
+              RegExp(r'''<script[^>]*id=["']RENDER_DATA["'][^>]*>([^<]+)''')
+                  .firstMatch(html);
+          if (jsonMatch != null) {
+            final decoded = utf8.decode(base64Decode(jsonMatch.group(1)!));
+            final data = json.decode(decoded) as Map<String, dynamic>;
+            final secUid = _extractSecUidFromRenderData(data);
+            if (secUid != null) return getUserInfo(secUid);
+          }
+        }
+      } catch (_) {}
+
+      throw DouyinApiException('找不到该用户，请检查抖音号是否正确');
+    } on DioException catch (e) {
+      throw DouyinApiException('查找用户失败: ${e.message}');
+    }
+  }
+
+  /// 通过搜索 API 查找用户
+  Future<Map<String, dynamic>?> searchUser(String keyword) async {
+    try {
+      final response = await _dio.get(
+        '/aweme/v1/web/discover/search/',
+        queryParameters: {
+          'keyword': keyword,
+          'offset': '0',
+          'count': '10',
+          'aid': _aid,
+          'device_platform': 'webapp',
+        },
+      );
+
+      final data = _parseResponse(response);
+      if (data == null) return null;
+
+      final userList = data['user_list'] as List<dynamic>?;
+      if (userList == null || userList.isEmpty) return null;
+
+      // 精确匹配 unique_id
+      for (final item in userList) {
+        final userInfo = item['user_info'] as Map<String, dynamic>?;
+        if (userInfo == null) continue;
+        final uid = userInfo['unique_id'] as String? ?? '';
+        final shortId = userInfo['short_id'] as String? ?? '';
+        if (uid == keyword || shortId == keyword) {
+          return _extractUserInfo(userInfo);
         }
       }
 
+      // 没找到精确匹配，返回第一个结果
+      final first = userList.first['user_info'] as Map<String, dynamic>?;
+      if (first != null) {
+        return _extractUserInfo(first);
+      }
+
       return null;
-    } on DioException catch (e) {
-      throw DouyinApiException('查找用户失败: ${e.message}');
+    } on DioException {
+      return null;
     }
   }
 
