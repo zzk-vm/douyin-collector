@@ -237,27 +237,39 @@ class DouyinApiService {
 
       final data = _parseResponse(response);
       if (data == null) {
+        throw DouyinApiException('获取作品列表失败：API返回异常数据');
+      }
+
+      final awemeList = data['aweme_list'] as List<dynamic>?;
+      if (awemeList == null) {
+        // 尝试从嵌套 data 中取值
+        final inner = data['data'] as Map<String, dynamic>?;
+        if (inner != null) {
+          final innerList = inner['aweme_list'] as List<dynamic>?;
+          if (innerList != null) {
+            return _parsePostList(innerList, data);
+          }
+        }
         return DouyinPostListResult(posts: [], hasMore: false);
       }
 
-      final awemeList = data['aweme_list'] as List<dynamic>? ?? [];
-      final hasMore = data['has_more'] == true;
-      final maxCursor = data['max_cursor'] as int? ?? 0;
-
-      final posts = awemeList
-          .map((item) => _extractPost(item as Map<String, dynamic>))
-          .where((p) => p != null)
-          .cast<Map<String, dynamic>>()
-          .toList();
-
-      return DouyinPostListResult(
-        posts: posts,
-        hasMore: hasMore,
-        maxCursor: maxCursor,
-      );
+      return _parsePostList(awemeList, data);
     } on DioException catch (e) {
       throw DouyinApiException('获取作品列表失败: ${e.message}');
     }
+  }
+
+  DouyinPostListResult _parsePostList(
+      List<dynamic> list, Map<String, dynamic> rootData) {
+    final hasMore = rootData['has_more'] == true;
+    final maxCursor = rootData['max_cursor'] as int? ?? 0;
+    final posts = list
+        .map((item) => _extractPost(item as Map<String, dynamic>))
+        .where((p) => p != null)
+        .cast<Map<String, dynamic>>()
+        .toList();
+    return DouyinPostListResult(
+        posts: posts, hasMore: hasMore, maxCursor: maxCursor);
   }
 
   // ==================== 数据提取 ====================

@@ -31,7 +31,20 @@ class _HomePageState extends State<HomePage> {
       builder: (context, state, _) {
         return RefreshIndicator(
           onRefresh: () async {
-            await state.syncAll();
+            final result = await state.syncAll();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context)
+                ..clearSnackBars()
+                ..showSnackBar(
+                  SnackBar(
+                    content: Text(result.hasError
+                        ? '${result.summary}，${result.errors.length}个错误'
+                        : result.summary),
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 4),
+                  ),
+                );
+            }
           },
           child: _buildBody(state),
         );
@@ -87,7 +100,19 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
-              onPressed: state.isSyncing ? null : () => state.syncAll(),
+              onPressed: state.isSyncing ? null : () async {
+                final result = await state.syncAll();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context)
+                    ..clearSnackBars()
+                    ..showSnackBar(
+                      SnackBar(
+                        content: Text(result.summary),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                }
+              },
               icon: state.isSyncing
                   ? const SizedBox(
                       width: 16,
