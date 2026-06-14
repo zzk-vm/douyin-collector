@@ -102,7 +102,7 @@ class AppState extends ChangeNotifier {
 
     // 先同步该博主的最新内容
     try {
-      await _syncAll();
+      await syncAll();
     } catch (_) {}
 
     // 重新加载

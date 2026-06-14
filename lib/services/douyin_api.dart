@@ -106,7 +106,7 @@ class DouyinApiService {
       if (html == null) return null;
 
       // 尝试从 HTML 中提取 sec_uid
-      final secUidMatch = RegExp(r'sec_uid["\']?\s*[:=]\s*["\']([^"\']+)')
+      final secUidMatch = RegExp(r"sec_uid[\"']?\s*[:=]\s*[\"']([^\"']+)")
           .firstMatch(html);
       if (secUidMatch != null) {
         final secUid = secUidMatch.group(1)!;
@@ -115,7 +115,7 @@ class DouyinApiService {
 
       // 尝试从页面 JSON 数据中提取
       final jsonMatch =
-          RegExp(r'<script[^>]*id=["\']RENDER_DATA["\'][^>]*>([^<]+)')
+          RegExp(r"<script[^>]*id=[\"']RENDER_DATA[\"'][^>]*>([^<]+)")
               .firstMatch(html);
       if (jsonMatch != null) {
         final decoded = utf8.decode(base64Decode(jsonMatch.group(1)!));
