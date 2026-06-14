@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
-import 'package:cookie_jar/cookie_jar.dart';
-import 'package:path_provider/path_provider.dart';
+import 'cookie_service.dart';
 
 /// 抖音公开 API 服务
 ///
@@ -11,49 +9,44 @@ import 'package:path_provider/path_provider.dart';
 class DouyinApiService {
   static const String _baseUrl = 'https://www.douyin.com';
   static const String _aid = '6383';
-  static const String _appName = 'aweme_list';
 
   late final Dio _dio;
-  late final CookieJar _cookieJar;
+  final CookieService _cookieService = CookieService();
 
   DouyinApiService() {
-    _cookieJar = CookieJar();
     _dio = Dio(BaseOptions(
       baseUrl: _baseUrl,
-      headers: _defaultHeaders,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
     ));
-    _dio.interceptors.add(CookieManager(_cookieJar));
   }
 
-  Map<String, dynamic> get _defaultHeaders => {
-        'User-Agent':
-            'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
-            '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        'Accept':
-            'application/json, text/plain, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Referer': '$_baseUrl/',
-        'Origin': _baseUrl,
-        'sec-ch-ua':
-            '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'sec-ch-ua-mobile': '?1',
-        'sec-ch-ua-platform': '"Android"',
-      };
-
-  /// 初始化：获取匿名 session cookie
-  Future<bool> initialize() async {
-    try {
-      final response = await _dio.get('/', options: Options(headers: {
-        'User-Agent':
-            'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
-            '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-      }));
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
+  /// 获取含动态 cookie 的请求头
+  Map<String, dynamic> _buildHeaders({String? referer}) {
+    final headers = <String, dynamic>{
+      'User-Agent':
+          'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
+          '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'Origin': _baseUrl,
+    };
+    if (referer != null) {
+      headers['Referer'] = referer;
+    } else {
+      headers['Referer'] = '$_baseUrl/';
     }
+    // 注入 WebView 获取到的真实 cookie
+    final cookie = _cookieService.cookieHeader;
+    if (cookie != null && cookie.isNotEmpty) {
+      headers['Cookie'] = cookie;
+    }
+    return headers;
+  }
+
+  /// 初始化
+  Future<bool> initialize() async {
+    return _cookieService.hasCookies;
   }
 
   // ==================== 用户信息 ====================
@@ -76,9 +69,8 @@ class DouyinApiService {
           'aid': _aid,
           'device_platform': 'webapp',
         },
-        options: Options(headers: {
-          'Referer': '$_baseUrl/user/$secUid',
-        }),
+        options: Options(
+            headers: _buildHeaders(referer: '$_baseUrl/user/$secUid')),
       );
 
       final data = _parseResponse(response);
@@ -118,12 +110,7 @@ class DouyinApiService {
           '/user/$cleanId',
           options: Options(
             followRedirects: false,
-            headers: {
-              'User-Agent':
-                  'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36',
-              'Accept':
-                  'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            },
+            headers: _buildHeaders(),
           ),
         );
 
@@ -167,6 +154,7 @@ class DouyinApiService {
           'aid': _aid,
           'device_platform': 'webapp',
         },
+        options: Options(headers: _buildHeaders()),
       );
 
       final data = _parseResponse(response);
@@ -229,6 +217,8 @@ class DouyinApiService {
           'aid': _aid,
           'device_platform': 'webapp',
         },
+        options: Options(
+            headers: _buildHeaders(referer: '$_baseUrl/user/$secUid')),
       );
 
       final data = _parseResponse(response);

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_state.dart';
 import '../services/douyin_api.dart';
+import '../services/cookie_service.dart';
+import 'cookie_setup_page.dart';
 
 /// 添加博主页面
 class AddCreatorPage extends StatefulWidget {
@@ -14,6 +16,7 @@ class AddCreatorPage extends StatefulWidget {
 class _AddCreatorPageState extends State<AddCreatorPage> {
   final _controller = TextEditingController();
   bool _isLoading = false;
+  final CookieService _cookieService = CookieService();
 
   @override
   void dispose() {
@@ -101,7 +104,6 @@ class _AddCreatorPageState extends State<AddCreatorPage> {
 
             const SizedBox(height: 16),
 
-            // 提示信息
             if (_isLoading)
               const Center(
                 child: Padding(
@@ -126,6 +128,17 @@ class _AddCreatorPageState extends State<AddCreatorPage> {
     if (input.isEmpty) {
       _showSnackBar('请输入抖音号或主页链接');
       return;
+    }
+
+    // 检查是否有 cookie，没有则先获取
+    if (!_cookieService.hasCookies) {
+      final ok = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => const CookieSetupPage()),
+      );
+      if (ok != true) {
+        return; // 用户取消或失败
+      }
     }
 
     setState(() => _isLoading = true);
