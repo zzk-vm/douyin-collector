@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'cookie_service.dart';
+import 'webview_api_provider.dart';
 
 /// 抖音公开 API 服务
 ///
@@ -12,6 +13,7 @@ class DouyinApiService {
 
   late final Dio _dio;
   final CookieService _cookieService = CookieService();
+  final WebViewApiController _webView = WebViewApiController();
 
   DouyinApiService() {
     _dio = Dio(BaseOptions(
@@ -36,7 +38,6 @@ class DouyinApiService {
     } else {
       headers['Referer'] = '$_baseUrl/';
     }
-    // 注入 WebView 获取到的真实 cookie
     final cookie = _cookieService.cookieHeader;
     if (cookie != null && cookie.isNotEmpty) {
       headers['Cookie'] = cookie;
@@ -54,13 +55,27 @@ class DouyinApiService {
   /// 通过 sec_uid 获取博主信息
   Future<Map<String, dynamic>?> getUserInfo(String secUid) async {
     try {
-      // 先访问用户主页获取 cookie
+      // 先访问用户主页（WebView 方式）
+      if (_webView.isReady) {
+        final wvData = await _webView.fetchJson(
+          '/aweme/v1/web/user/profile/other/',
+          queryParams: {
+            'sec_user_id': secUid,
+            'aid': _aid,
+            'device_platform': 'webapp',
+          },
+        );
+        if (wvData != null) {
+          final user = _extractUserFromData(wvData);
+          if (user != null) return user;
+        }
+      }
+
+      // 备用：Dio 方式
       try {
         await _dio.get('/user/$secUid',
             options: Options(headers: {'Referer': '$_baseUrl/'}));
-      } catch (_) {
-        // 忽略页面加载错误，可能部分内容需要 JS
-      }
+      } catch (_) {}
 
       final response = await _dio.get(
         '/aweme/v1/web/user/profile/other/',
@@ -78,78 +93,41 @@ class DouyinApiService {
         throw DouyinApiException('抖音返回了异常数据，可能被限制访问');
       }
 
-      // 尝试多种字段名解析用户数据
-      Map<String, dynamic>? user;
-      user = data['user_info'] as Map<String, dynamic>?;
-      if (user == null) {
-        user = data['user'] as Map<String, dynamic>?;
-      }
-      if (user == null) {
-        // 嵌套在 data 字段里
-        final innerData = data['data'] as Map<String, dynamic>?;
-        if (innerData != null) {
-          user = innerData['user_info'] as Map<String, dynamic>? ??
-              innerData['user'] as Map<String, dynamic>?;
-        }
-      }
+      final user = _extractUserFromData(data);
       if (user == null) {
         final errMsg = data['status_msg'] as String? ??
             data['status_code']?.toString() ??
             '未知错误';
         throw DouyinApiException('抖音API错误: $errMsg');
       }
-
-      return _extractUserInfo(user);
+      return user;
     } on DioException catch (e) {
       throw DouyinApiException('获取用户信息失败: ${e.message}');
     }
+  }
+
+  /// 从响应数据中提取用户信息
+  Map<String, dynamic>? _extractUserFromData(Map<String, dynamic> data) {
+    Map<String, dynamic>? user;
+    user = data['user_info'] as Map<String, dynamic>?;
+    if (user == null) user = data['user'] as Map<String, dynamic>?;
+    if (user == null) {
+      final inner = data['data'] as Map<String, dynamic>?;
+      if (inner != null) {
+        user = inner['user_info'] as Map<String, dynamic>? ??
+            inner['user'] as Map<String, dynamic>?;
+      }
+    }
+    if (user != null) return _extractUserInfo(user);
+    return null;
   }
 
   /// 通过 unique_id（抖音号）查找用户
   Future<Map<String, dynamic>?> searchUserByUniqueId(String uniqueId) async {
     try {
       final cleanId = uniqueId.replaceFirst('@', '');
-
-      // 先用搜索 API 查找
-      try {
-        final result = await searchUser(cleanId);
-        if (result != null) return result;
-      } catch (_) {
-        // 搜索失败，走 fallback
-      }
-
-      // 备用：直接访问用户主页
-      try {
-        final response = await _dio.get(
-          '/user/$cleanId',
-          options: Options(
-            followRedirects: false,
-            headers: _buildHeaders(),
-          ),
-        );
-
-        final html = response.data as String?;
-        if (html != null) {
-          final secUidMatch =
-              RegExp(r'''sec_uid["']?\s*[:=]\s*["']([^"']+)''')
-                  .firstMatch(html);
-          if (secUidMatch != null) {
-            return getUserInfo(secUidMatch.group(1)!);
-          }
-
-          // 尝试从 RENDER_DATA 中提取
-          final jsonMatch =
-              RegExp(r'''<script[^>]*id=["']RENDER_DATA["'][^>]*>([^<]+)''')
-                  .firstMatch(html);
-          if (jsonMatch != null) {
-            final decoded = utf8.decode(base64Decode(jsonMatch.group(1)!));
-            final data = json.decode(decoded) as Map<String, dynamic>;
-            final secUid = _extractSecUidFromRenderData(data);
-            if (secUid != null) return getUserInfo(secUid);
-          }
-        }
-      } catch (_) {}
-
+      final result = await searchUser(cleanId);
+      if (result != null) return result;
       throw DouyinApiException('找不到该用户，请检查抖音号是否正确');
     } on DioException catch (e) {
       throw DouyinApiException('查找用户失败: ${e.message}');
@@ -174,9 +152,7 @@ class DouyinApiService {
       final data = _parseResponse(response);
       if (data == null) return null;
 
-      // 搜索API返回的字段名可能不同，尝试多种格式
       var userList = data['user_list'] as List<dynamic>?;
-      // 有时搜索结果在 data 字段里
       if (userList == null) {
         final innerData = data['data'] as Map<String, dynamic>?;
         if (innerData != null) {
@@ -185,7 +161,6 @@ class DouyinApiService {
       }
       if (userList == null || userList.isEmpty) return null;
 
-      // 精确匹配 unique_id
       for (final item in userList) {
         final userInfo = item['user_info'] as Map<String, dynamic>?;
         if (userInfo == null) continue;
@@ -196,37 +171,84 @@ class DouyinApiService {
         }
       }
 
-      // 没找到精确匹配，返回第一个结果
       final first = userList.first['user_info'] as Map<String, dynamic>?;
-      if (first != null) {
-        return _extractUserInfo(first);
-      }
-
+      if (first != null) return _extractUserInfo(first);
       return null;
     } on DioException {
       return null;
     }
   }
 
-  // ==================== 作品列表 ====================
+  // ==================== 作品列表（WebView 优先） ====================
 
-  /// 获取博主的作品列表
-  ///
-  /// [secUid] 抖音用户sec_uid
-  /// [minCursor] 分页游标，首次传0
-  /// [count] 每页数量，最大18
+  /// 获取博主的作品列表（优先用 WebView 浏览器引擎）
   Future<DouyinPostListResult> getUserPosts(
     String secUid, {
     int minCursor = 0,
     int count = 18,
   }) async {
+    // 方式1: WebView 浏览器引擎（可绕过反爬）
+    if (_webView.isReady) {
+      try {
+        final result = await _fetchPostsViaWebView(secUid, count, minCursor);
+        if (result != null) return result;
+      } catch (e) {
+        debugPrint('WebView posts fetch failed, fallback to Dio: $e');
+      }
+    }
+
+    // 方式2: Dio HTTP 客户端（备用）
+    return _fetchPostsViaDio(secUid, minCursor, count);
+  }
+
+  /// 通过 WebView 浏览器引擎获取作品列表
+  Future<DouyinPostListResult?> _fetchPostsViaWebView(
+      String secUid, int count, int cursor) async {
+    final data = await _webView.fetchJson(
+      '/aweme/v1/web/aweme/post/',
+      queryParams: {
+        'sec_user_id': secUid,
+        'count': count.toString(),
+        'max_cursor': cursor.toString(),
+        'min_cursor': '0',
+        'aid': _aid,
+        'device_platform': 'webapp',
+      },
+    );
+    if (data == null) return null;
+
+    // 检查错误码
+    final statusCode = data['status_code'] as int?;
+    if (statusCode != null && statusCode != 0) {
+      throw DouyinApiException(
+          'API返回错误: status_code=$statusCode, msg=${data['status_msg']}');
+    }
+
+    final awemeList = data['aweme_list'] as List<dynamic>?;
+    if (awemeList == null) {
+      final inner = data['data'] as Map<String, dynamic>?;
+      if (inner != null) {
+        final innerList = inner['aweme_list'] as List<dynamic>?;
+        if (innerList != null) {
+          return _parsePostList(innerList, data);
+        }
+      }
+      return DouyinPostListResult(posts: [], hasMore: false);
+    }
+
+    return _parsePostList(awemeList, data);
+  }
+
+  /// 通过 Dio 获取作品列表（备用）
+  Future<DouyinPostListResult> _fetchPostsViaDio(
+      String secUid, int cursor, int count) async {
     try {
       final response = await _dio.get(
         '/aweme/v1/web/aweme/post/',
         queryParameters: {
           'sec_user_id': secUid,
           'count': count.toString(),
-          'max_cursor': minCursor.toString(),
+          'max_cursor': cursor.toString(),
           'min_cursor': '0',
           'aid': _aid,
           'device_platform': 'webapp',
@@ -242,7 +264,6 @@ class DouyinApiService {
 
       final awemeList = data['aweme_list'] as List<dynamic>?;
       if (awemeList == null) {
-        // 尝试从嵌套 data 中取值
         final inner = data['data'] as Map<String, dynamic>?;
         if (inner != null) {
           final innerList = inner['aweme_list'] as List<dynamic>?;
@@ -275,7 +296,6 @@ class DouyinApiService {
   // ==================== 数据提取 ====================
 
   Map<String, dynamic> _extractUserInfo(Map<String, dynamic> user) {
-    // 安全转换：处理字段可能是 String/Int/null 的情况
     String? _safeStr(dynamic v) => v?.toString();
     int _safeInt(dynamic v, {int def = 0}) {
       if (v is int) return v;
@@ -326,7 +346,6 @@ class DouyinApiService {
       if (video != null) {
         final cover = video['cover'] as Map<String, dynamic>?;
         videoCoverUrl = _extractUrl(cover);
-
         final playAddr = video['play_addr'] as Map<String, dynamic>?;
         videoUrl = _extractUrl(playAddr);
       }
@@ -358,17 +377,12 @@ class DouyinApiService {
     if (mediaItem == null) return null;
     final urlList = mediaItem['url_list'] as List<dynamic>?;
     if (urlList == null || urlList.isEmpty) return null;
-
-    // 取第一个可用URL（通常是最高质量）
     final url = urlList.first as String?;
     if (url == null || url.isEmpty) return null;
-
-    // 有些URL是 webp 格式，尝试转成更通用的格式
     return url.replaceAll(RegExp(r'~tplv.*'), '');
   }
 
   String? _extractSecUidFromRenderData(Map<String, dynamic> data) {
-    // RENDER_DATA 结构复杂，递归搜索 sec_uid
     try {
       return _deepSearch(data, 'sec_uid');
     } catch (_) {
@@ -408,7 +422,6 @@ class DouyinApiService {
       }
     }
     if (data is Map<String, dynamic>) {
-      // 检查错误码
       final statusCode = data['status_code'] as int?;
       if (statusCode != null && statusCode != 0) {
         throw DouyinApiException(
@@ -421,31 +434,22 @@ class DouyinApiService {
 
   /// 从用户输入中提取 sec_uid
   static String? extractSecUidFromInput(String input) {
-    // 直接是 sec_uid 格式（长字符串）
     if (input.length > 20 && !input.contains('/') && !input.contains('.')) {
       return input;
     }
-
-    // 从URL中提取
-    // https://www.douyin.com/user/MS4wLjABAAAA...
     final urlMatch =
         RegExp(r'douyin\.com/(?:user|share/user)/([^/?&#]+)').firstMatch(input);
     if (urlMatch != null) {
       return urlMatch.group(1)!;
     }
-
-    // 从分享链接中提取
-    // https://v.douyin.com/xxxx/
     final shortMatch =
         RegExp(r'douyin\.com/(?:video|note)/(\d+)').firstMatch(input);
     if (shortMatch != null) {
-      return shortMatch.group(1); // 这是 aweme_id, 不是 sec_uid
+      return shortMatch.group(1);
     }
-
     return null;
   }
 
-  /// 判断输入是否为抖音号（非 sec_uid）
   static bool isUniqueId(String input) {
     return extractSecUidFromInput(input) == null;
   }

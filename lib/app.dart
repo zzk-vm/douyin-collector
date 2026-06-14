@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/app_state.dart';
+import 'services/webview_api_provider.dart';
 import 'screens/home_page.dart';
 import 'screens/creators_page.dart';
 
@@ -57,32 +58,40 @@ class _MainScaffoldState extends State<MainScaffold> {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
 
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
-        },
-        destinations: [
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: state.isSyncing,
-              child: const Icon(Icons.rss_feed_outlined),
-            ),
-            selectedIcon: const Icon(Icons.rss_feed),
-            label: '信息流',
+    return Stack(
+      children: [
+        // 隐藏的 WebView（在底层，用于浏览器级 API 请求）
+        const Positioned.fill(child: HiddenWebView()),
+
+        // 正式 UI
+        Scaffold(
+          body: IndexedStack(
+            index: _currentIndex,
+            children: _pages,
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: '博主',
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _currentIndex,
+            onDestinationSelected: (index) {
+              setState(() => _currentIndex = index);
+            },
+            destinations: [
+              NavigationDestination(
+                icon: Badge(
+                  isLabelVisible: state.isSyncing,
+                  child: const Icon(Icons.rss_feed_outlined),
+                ),
+                selectedIcon: const Icon(Icons.rss_feed),
+                label: '信息流',
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.people_outline),
+                selectedIcon: Icon(Icons.people),
+                label: '博主',
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
