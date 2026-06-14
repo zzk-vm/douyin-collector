@@ -135,7 +135,7 @@ class _CookieSetupPageState extends State<CookieSetupPage> {
         }
       },
       onReceivedError: (c, r, e) {
-        debugPrint('WebView error: ${e.message}');
+        debugPrint('WebView error: ${e.description}');
       },
     );
   }
