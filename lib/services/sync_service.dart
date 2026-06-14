@@ -20,19 +20,22 @@ class SyncResult {
   bool get hasError => errors.isNotEmpty;
   String get summary {
     final parts = <String>[
-      '检查了 $totalCreators 位博主',
-      '成功获取 $successCreators 位',
+      '检查 $totalCreators 位博主',
     ];
     if (newPosts > 0) {
       parts.add('新增 $newPosts 篇作品');
-    } else {
+    } else if (successCreators > 0) {
       parts.add('暂无新内容');
+    } else {
+      parts.add('获取失败');
     }
     if (errors.isNotEmpty) {
-      parts.add('${errors.length} 个错误');
+      parts.add('${errors.length}个错误');
     }
     return parts.join('，');
   }
+
+  String get errorDetail => errors.isNotEmpty ? errors.first : '';
 }
 
 /// 同步服务

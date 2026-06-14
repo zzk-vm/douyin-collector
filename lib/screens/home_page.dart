@@ -33,15 +33,16 @@ class _HomePageState extends State<HomePage> {
           onRefresh: () async {
             final result = await state.syncAll();
             if (context.mounted) {
+              final msg = result.hasError
+                  ? result.errorDetail
+                  : result.summary;
               ScaffoldMessenger.of(context)
                 ..clearSnackBars()
                 ..showSnackBar(
                   SnackBar(
-                    content: Text(result.hasError
-                        ? '${result.summary}，${result.errors.length}个错误'
-                        : result.summary),
+                    content: Text(msg),
                     behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 4),
+                    duration: const Duration(seconds: 5),
                   ),
                 );
             }
