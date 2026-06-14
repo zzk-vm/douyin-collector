@@ -17,7 +17,7 @@ class DouyinApiService {
   late final CookieJar _cookieJar;
 
   DouyinApiService() {
-    _cookieJar = PersistCookieJar(storage: MemoryCookieJar());
+    _cookieJar = CookieJar();
     _dio = Dio(BaseOptions(
       baseUrl: _baseUrl,
       headers: _defaultHeaders,
@@ -106,8 +106,9 @@ class DouyinApiService {
       if (html == null) return null;
 
       // 尝试从 HTML 中提取 sec_uid
-      final secUidMatch = RegExp(r"sec_uid[\"']?\s*[:=]\s*[\"']([^\"']+)")
-          .firstMatch(html);
+      final secUidMatch =
+          RegExp(r'''sec_uid["']?\s*[:=]\s*["']([^"']+)''')
+              .firstMatch(html);
       if (secUidMatch != null) {
         final secUid = secUidMatch.group(1)!;
         return getUserInfo(secUid);
@@ -115,7 +116,7 @@ class DouyinApiService {
 
       // 尝试从页面 JSON 数据中提取
       final jsonMatch =
-          RegExp(r"<script[^>]*id=[\"']RENDER_DATA[\"'][^>]*>([^<]+)")
+          RegExp(r'''<script[^>]*id=["']RENDER_DATA["'][^>]*>([^<]+)''')
               .firstMatch(html);
       if (jsonMatch != null) {
         final decoded = utf8.decode(base64Decode(jsonMatch.group(1)!));
