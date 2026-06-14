@@ -32,11 +32,7 @@ class _HomePageState extends State<HomePage> {
       builder: (context, state, _) {
         final style = state.viewStyle;
         return Scaffold(
-          // 极简模式用纯黑背景
-          backgroundColor:
-              style == ViewStyle.minimal ? Colors.black : null,
-
-          // 顶部栏 + 视图切换
+          backgroundColor: style == ViewStyle.minimal ? Colors.black : null,
           appBar: AppBar(
             title: const Text('信息流'),
             actions: [
